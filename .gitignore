@@ -1,0 +1,11 @@
+
+/build
+/qrun.out
+
+transcript
+*.pfl
+*.xml
+*.log
+*.rdf
+*.sty
+*.wlf
