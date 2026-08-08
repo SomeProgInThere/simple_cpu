@@ -1,13 +1,14 @@
 
 module dff (
-	input clk, en, rst, d,
+	input clk, en, rst,
+	input d,
 	output reg q
-);
-	wire d_mux;
-	assign d_mux = en ? d : q;
-	
+);	
 	always @(posedge clk or negedge rst) begin
-		q <= ~rst ? 1'b0 : d_mux;
+		if (!rst)
+            q <= 1'b0;
+        else if (en)
+            q <= d;
 	end
 	
 endmodule

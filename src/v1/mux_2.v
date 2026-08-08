@@ -6,6 +6,6 @@ module mux_2 #(
     input sel,
     output [N - 1:0] y
 );
-    assign y = sel ? a : b;
+    assign y = sel ? b : a;
 
 endmodule

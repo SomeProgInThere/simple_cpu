@@ -1,15 +1,18 @@
 
-module alu (
-	input [7:0] a, b,
+module alu #(
+	parameter N = 2
+) (
+	input [N - 1:0] a, b,
 	input [4:0] s,
-	output [7:0] y,
-	output cout
+	output [N - 1:0] out,
+	output carry
 );
-	wire [7:0] b_inv = b ^ { 8{s[3]} };
-	wire [7:0] b_sign = { 8{~s[4]} } & b_inv;
-	wire [7:0] c = a & b;
+	wire [N - 1:0] b_inv = b ^ { N{s[3]} };
+	wire [N - 1:0] b_sign = { N{~s[4]} } & b_inv;
+	wire [N - 1:0] c = a & b;
 	
-	rca #(.N(8)) adder (a, b_sign, s[2], sum, cout);
-	mux_4 #(.N(8)) mux (sum, c, a, b, s[1:0], y);
+	wire [N - 1:0] sum;
+	rca #(.N(N)) adder (a, b_sign, s[2], sum, carry);
+	mux_4 #(.N(N)) mux (sum, c, a, b, s[1:0], out);
 	
 endmodule

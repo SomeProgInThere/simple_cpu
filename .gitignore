@@ -9,3 +9,5 @@ transcript
 *.rdf
 *.sty
 *.wlf
+*.do
+*.ini

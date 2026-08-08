@@ -39,7 +39,7 @@ set result [catch {
         -sv {*}$src_files -top $top -work $work_dir \
         -L pmi_work -L ovi_ice40up \
         -voptargs="+acc" -onfinish stop -gui \
-        -do "add wave /*; run $time; view wave"
+        -do "log -r /*; add wave /*; run $time; view wave"
 } message]
 
 if {$result != 0} {

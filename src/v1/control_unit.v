@@ -9,7 +9,7 @@ module control_unit (
     // -- sequence generator --
 
     wire fch, dec, exc, inc; 
-    seq_gen sg_1(
+    seq_gen seq(
         clk, en, rst, 
         fch, dec, exc, inc
     );
@@ -26,42 +26,39 @@ module control_unit (
 
     wire carry_reg, zero_reg;
     wire en_al = add | sub | bitand;
-    reg_2 status_reg(
-		clk, en_al, rst, 
-		{ carry, zero },
-		{ carry_reg, zero_reg }
-	);
+    register #(.N(2)) status_reg(clk, en_al, rst, { carry, zero },{ carry_reg, zero_reg });
 
-    // -- jump control --
+    // -- jump control & other peripheral signals --
 
     wire jmp_t = |{ 
-        jmp, 
-        zero & jmpz, ~zero & jmpnz, 
-        carry & jmpc, ~carry & jmpnc 
+        jmp,
+        zero_reg & jmpz, ~zero_reg & jmpnz, 
+        carry_reg & jmpc, ~carry_reg & jmpnc 
     };
 
     wire jmp_nt;
-    dff dff_1(clk, 1'b0, rst, ~jmp_t, jmp_nt);
-    assign en_pc = (inc & jmp_nt) | (exc & jmp_t);
-
-    // -- other peripheral signals --
-
+    dff dff_1(clk, 1'b1, rst, ~jmp_t, jmp_nt);
+    
+    wire en_jmp = |{ jmp, jmpz, jmpnz, jmpc, jmpnc };
+    
     assign mux_a = inc;
-    assign mux_b = load | en_al;
+    assign mux_b = load | en_al | en_jmp;
     assign mux_c = in | out;
+    
+    assign en_pc = (inc & jmp_nt) | (exc & jmp_t);
     assign en_da = exc & (load | in | en_al);
     assign en_in = fch;
+    
     assign mem_we = exc & out;
 
     // -- alu instruction signals --
 
-    wire en_jmp = |{ jmp, jmpz, jmpnz, jmpc, jmpnc };
     assign alu_s = {
-        |{ en_jmp, load, in, bitand },
-        |{ en_jmp, load, in, out },
-        inc | sub,
+        inc,
         sub,
-        inc
+        inc | sub,
+        |{ en_jmp, load, in, out },
+        |{ en_jmp, load, in, bitand }
     };
 
 endmodule

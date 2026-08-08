@@ -3,23 +3,23 @@ module cpu (
     input clk, nrst,
     output sout
 );
-    localparam MEM_DATA_WIDTH = 16;
-    localparam MEM_ADDR_WIDTH = 8;
+    // -- internal buses --
+
+    localparam DATA_WIDTH = 16;
+    localparam ADDR_WIDTH = 8;
     
+    wire [ADDR_WIDTH - 1:0] addr;
+    wire [DATA_WIDTH - 1:0] din, dout;
+
     wire en_1 = 1'b1;
 
     wire rst;
     dff rst_reg(clk, en_1, 1'b1, ~nrst, rst);
 
-    wire [MEM_ADDR_WIDTH - 1:0] addr;
-    wire [MEM_DATA_WIDTH - 1:0] din, dout;
-
-    wire sout_reg;
-    dff serial_reg(clk, &addr, rst, dout[0], sout_reg);
-    assign sout = ~sout_reg;
+    // -- control signals --
 
     wire carry, zero;
-    wire [7:0] opcode;
+    wire [ADDR_WIDTH - 1:0] opcode;
     wire mux_a, mux_b, mux_c, en_da, en_pc, en_in, mem_we;
     wire [4:0] alu_s;
 
@@ -30,29 +30,43 @@ module cpu (
         alu_s
     );
 
-    wire [7:0] alu_out, acc_out, pc_out;
-    wire [15:0] ins_out;
-    wire mux_i, mux_d;
+    // -- ALU --
 
-    alu alu_(mux_i, mux_d, alu_s, alu_out, carry);
+    wire [DATA_WIDTH - 1:0] ins_out;
+    wire [ADDR_WIDTH - 1:0] alu_out, acc_out, pc_out;
+    wire [ADDR_WIDTH - 1:0] mux_i, mux_d;
 
-    reg_8 acc_reg(clk, en_da, rst, alu_out, acc_out);
-    reg_8 pc_reg(clk, en_pc, rst, alu_out, pc_out);
-    reg_16 ins_reg(clk, en_in, rst, din, ins_out);
+    alu #(.N(ADDR_WIDTH)) alu_(mux_i, mux_d, alu_s, alu_out, carry);
 
-    mux_2 #(.N(8)) mux_ins(ins_out[7:0], pc_out, mux_a, mux_i);
-    mux_2 #(.N(8)) mux_dec(din[7:0], acc_out, mux_b, mux_d);
-    mux_2 #(.N(8)) mux_acc(pc_out, ins_out[7:0], mux_c, addr);
+    // -- registers and status/data signals -- 
 
-    assign zero = ~|acc_out;
-    assign dout = { { 8{8'hA0} }, acc_out };
+    register #(.N(DATA_WIDTH)) ins_reg(clk, en_in, rst, din, ins_out);
+    register #(.N(ADDR_WIDTH)) acc_reg(clk, en_da, rst, alu_out, acc_out);
+    register #(.N(ADDR_WIDTH)) pc_reg(clk, en_pc, rst, alu_out, pc_out);
+
+    mux_2 #(.N(ADDR_WIDTH)) mux_ins(acc_out, pc_out, mux_a, mux_i);
+    mux_2 #(.N(ADDR_WIDTH)) mux_dec(din[ADDR_WIDTH - 1:0], ins_out[ADDR_WIDTH - 1:0], mux_b, mux_d);
+    mux_2 #(.N(ADDR_WIDTH)) mux_acc(pc_out, ins_out[ADDR_WIDTH - 1:0], mux_c, addr);
+
+    assign zero = ~|alu_out;
+    assign opcode = ins_out[DATA_WIDTH - 1:ADDR_WIDTH];
+    assign dout = { 8'h00, acc_out };
+
+    // -- main memory --
 
     sp_ram #(
-        .DATA_WIDTH(MEM_DATA_WIDTH), .ADDR_WIDTH(MEM_ADDR_WIDTH)
+        .DATA_WIDTH(DATA_WIDTH), .ADDR_WIDTH(ADDR_WIDTH),
+        .PROGRAM_FILE("src/v1/main.hex")
     ) memory (
         ~clk, mem_we,
         addr,
         dout, din
     );
+
+    // -- serial output with buffer --
+
+    wire sout_reg;
+    dff serial_reg(clk, mem_we & (&addr), rst, dout[0], sout_reg);
+    assign sout = ~sout_reg;
 
 endmodule
