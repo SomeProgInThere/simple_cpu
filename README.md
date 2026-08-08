@@ -2,65 +2,51 @@
 
 Simple CPU is an 8-bit accumulator-based processor implemented in Verilog for the Lattice iCE40UP5K FPGA.
 
-The project explores the architecture of a small processor using a compact datapath, a shared instruction/data memory, and a multi-cycle control unit.
+It uses a compact multi-cycle architecture, unified instruction and data memory, and a small instruction set supporting arithmetic, logical, memory, I/O, and branch operations.
+
+>[!NOTE]
+>The custom tcl workflow only works for windows with Lattice Radiant installed on path. An open-source version using [OSS Cad Suite](https://github.com/YosysHQ/oss-cad-suite-build) is planned.
+>
+>Codex (gpt-5.6-sol) is used in this project for analysis, debugging and documentation.
 
 ## Architecture
 
-The processor consists of:
+The processor contains:
 
 - An 8-bit accumulator
 - An 8-bit program counter
 - A 16-bit instruction register
-- An 8-bit arithmetic logic unit
-- Carry and zero status flags
+- An 8-bit parameterized ALU
+- Registered carry and zero flags
 - A four-phase control unit
-- A 256-word, 16-bit memory
-- A simple output interface
+- A 256 × 16-bit unified memory
+- A buffered serial output
 
 ## Execution cycle
 
-Instructions are processed over four clock phases:
+Instructions pass through four clock phases:
 
 ```text
-    Fetch --> Decode --> Execute --> Fetch
+Fetch → Decode → Execute → Increment
+  ↑                            │
+  └────────────────────────────┘
 ```
 
 ### Fetch
 
-The instruction at the program counter is read from memory and stored in the instruction register.
+Memory is addressed by the program counter and the resulting 16-bit instruction is loaded into the instruction register.
 
 ### Decode
 
-The control unit interprets the opcode and prepares the datapath for the requested operation.
+The upper byte of the instruction is decoded and the control unit prepares the required datapath signals.
 
 ### Execute
 
-The selected arithmetic, memory, input/output, or branch operation is performed.
+The selected arithmetic, logical, memory, I/O, or branch operation is performed.
 
 ### Increment
 
-The program counter advances to the next instruction unless execution selected a branch target.
-
-## Datapath
-
-The CPU uses an accumulator architecture. Most arithmetic and logical operations use the accumulator as one operand and store their result back into it.
-
-The ALU supports:
-
-- Addition
-- Subtraction
-- Bitwise AND
-- Increment
-- Operand pass-through
-
-A ripple-carry adder performs addition and two's-complement subtraction.
-
-The processor maintains two status conditions:
-
-- **Zero:** the accumulator contains zero
-- **Carry:** an arithmetic operation produced a carry
-
-These conditions support conditional branch instructions.
+The program counter advances unless a branch operation has selected a new address.
 
 ## Instruction format
 
@@ -73,27 +59,56 @@ Instructions are 16 bits wide:
 +----------------+-----------------+
 ```
 
-The upper byte identifies the operation. The lower byte contains a memory address, branch target, or immediate operand, depending on the instruction.
+The upper byte selects the operation. The lower byte supplies an address or operand.
+
+Opcode decoding uses bit patterns, allowing unused opcode bits to remain available for future instruction variants.
 
 ## Instruction set
 
-| Opcode | Mnemonic | Description |
-|---:|---|---|
-| `0x0` | `LOAD` | Load a value into the accumulator |
-| `0x1` | `IN` | Read an input value |
-| `0x2` | `OUT` | Write the accumulator to an output location |
-| `0x3` | `ADD` | Add a value to the accumulator |
-| `0x4` | `SUB` | Subtract a value from the accumulator |
-| `0x5` | `AND` | Perform a bitwise AND |
-| `0x6` | `JMP` | Jump unconditionally |
-| `0x7` | `JMPZ` | Jump when the zero condition is set |
-| `0x8` | `JMPNZ` | Jump when the zero condition is clear |
-| `0x9` | `JMPC` | Jump when the carry condition is set |
-| `0xA` | `JMPNC` | Jump when the carry condition is clear |
+| Opcode pattern | Mnemonic | Description |
+|---|---|---|
+| `0000_????` | `LOAD` | Load a value into the accumulator |
+| `0001_????` | `AND` | Bitwise AND with the accumulator |
+| `0100_????` | `ADD` | Add a value to the accumulator |
+| `0110_????` | `SUB` | Subtract a value from the accumulator |
+| `1010_????` | `IN` | Read an input value |
+| `1110_????` | `OUT` | Write an output value |
+| `1000_????` | `JMP` | Jump unconditionally |
+| `1001_00??` | `JMPZ` | Jump when zero is set |
+| `1001_01??` | `JMPNZ` | Jump when zero is clear |
+| `1001_10??` | `JMPC` | Jump when carry is set |
+| `1001_11??` | `JMPNC` | Jump when carry is clear |
+
+Unrecognized opcode patterns perform no decoded operation.
+
+## Datapath
+
+The CPU follows an accumulator architecture. Arithmetic and logical instructions operate on the accumulator and store their results back into it.
+
+The ALU supports:
+
+- Addition
+- Subtraction
+- Bitwise AND
+- Increment
+- Operand pass-through
+
+Addition and subtraction use a parameterized ripple-carry adder. Subtraction is performed using two’s-complement arithmetic.
+
+Registers are also parameterized, allowing the same register module to implement the accumulator, program counter, instruction register, and status register.
+
+## Status flags
+
+The control unit stores two status flags after arithmetic or logical operations:
+
+- **Zero:** the ALU result is zero
+- **Carry:** the arithmetic result produces a carry
+
+Conditional jumps use these registered flags when deciding whether to update the program counter.
 
 ## Memory architecture
 
-The CPU uses a shared memory for instructions and data:
+Instructions and data share a synchronous single-port memory.
 
 | Property | Value |
 |---|---:|
@@ -101,33 +116,26 @@ The CPU uses a shared memory for instructions and data:
 | Word width | 16 bits |
 | Capacity | 256 words |
 
-The shared-memory design keeps the processor small and gives instructions and data a common address space.
+Memory is initialized from `src/v1/main.hex`, allowing a program to be loaded automatically for simulation and FPGA implementation.
 
-## Control unit
+## Output interface
 
-The control unit coordinates the instruction cycle and generates signals for:
-
-- Register updates
-- ALU operation selection
-- Memory access
-- Program-counter updates
-- Conditional branches
-
-A one-hot sequence generator tracks the current execution phase, while the instruction decoder translates opcodes into datapath operations.
+The processor exposes a buffered serial output named `sout`. Output data is captured during a memory write to the designated output address.
 
 ## Verification
 
-Component-level testbenches cover the primary processor building blocks:
+The project includes simulations for:
 
-- ALU
-- Instruction decoder
-- Sequence generator
-- Registers
-- Memory
+- Complete CPU operation
+- ALU operations
+- Instruction decoding
+- Execution sequencing
+- Parameterized registers
+- Program memory
 
-Simulation is supported through Questa or ModelSim, while synthesis and FPGA implementation use the Lattice Radiant toolchain.
+The CPU testbench clocks and resets the integrated processor while executing the program loaded from memory.
 
-## Target platform
+## Toolchain
 
 The project is configured for:
 
